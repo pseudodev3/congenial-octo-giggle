@@ -1,29 +1,33 @@
-name: Scavenger Miner
+name: Scavenger Swarm
 
 on:
-  # Trigger manually via button
-  workflow_dispatch:
-  # Trigger automatically every 6 hours
+  workflow_dispatch: # Manual Trigger
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *' # Auto-Respawn every 6 hours
 
 jobs:
-  mine:
+  miner:
     runs-on: ubuntu-latest
-    timeout-minutes: 350 # Run for almost 6 hours (Max free limit is 360)
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # SPAWN 20 CONCURRENT WORKERS
+        worker_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-    - name: Setup Node
+    - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '18'
 
     - name: Install Dependencies
-      run: npm install ws
+      run: npm install ws puppeteer
 
-    - name: Run The Miner
+    - name: Ignite Worker ${{ matrix.worker_id }}
       run: node worker.js
-
+      env:
+        # INJECT THE SECRET KEY FROM GITHUB SETTINGS
+        ACCESS_KEY: ${{ secrets.ACCESS_KEY }}

